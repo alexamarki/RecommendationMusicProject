@@ -1,6 +1,5 @@
 import argparse
 from typing import List, Tuple
-import csv
 import pandas as pd
 
 
