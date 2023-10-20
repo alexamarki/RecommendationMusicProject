@@ -1,18 +1,11 @@
 import argparse
 from typing import List, Tuple
-import csv
 import pandas as pd
-from typing import Literal, get_args
 
-ARTIST_CL = 7
-TRACK_POPULARITY_CL = 4
+TRACK_ID_CL = 2
 TRACK_NAME_CL = 3
-GENRES_CL = 8
-YEAR_CL = 1
-TRACK_CHARACTERISTIC_CLS = (10, 21)
-URL_CL = 0
-
-_DISTS = Literal["E_dist", "cos_dist", "E_dist_w_L1"]
+TRACK_POP_CL = 4
+ARTIST_CL = 7
 
 
 def get_table_shape(table: List[List[object]]) -> Tuple[int, int]:
@@ -46,117 +39,151 @@ def preprocess_file(file_path: str) -> List[List[object]]:
     return df.values.tolist()
 
 
-def get_top_artist_count(table, n=5):
+def get_artist_with_most_songs(table):
     artists = dict()
 
     for row in table:
         artists[row[ARTIST_CL]] = artists.get(row[ARTIST_CL], 0) + 1
 
-    return sorted(artists.items(), key=lambda x: x[1], reverse=True)[:n]
+    max_pair = ("", 0)
+    for i in artists.items():
+        if i[1] > max_pair[1]:
+            max_pair = i
+
+    print(sorted(artists.items(), key=lambda pair: pair[1], reverse=True)[:5])
+
+    # artists = [row[ARTIST_CL] for row in table]
+    # artists.sort()
+    #
+    # last_artist = artists[0]
+    # last_artist_count = 1
+    #
+    # max_artist = artists[0]
+    # max_artist_count = 1
+    #
+    # for artist in artists:
+    #     if artist == last_artist:
+    #         last_artist_count += 1
+    #     else:
+    #         if max_artist_count <= last_artist_count:
+    #             max_artist = last_artist
+    #             max_artist_count = last_artist_count
+    #         last_artist = artist
+    #         last_artist_count = 1
+
+    return max_pair
 
 
-def get_top_songs_by_artist(table, artist, n=5):
-    artist_songs = []
+def get_top_artist_count(table, n=5):
+    m = dict()
+    for i in table:
+        m[i[7]] = m.get(i[7], 0) + 1
+    return sorted(m.items(), key=lambda x: x[1], reverse=True)[:n]
 
+
+def get_top_artist_tracks(table, artist: str, n=5):
+    songs = list()
     for row in table:
         if row[ARTIST_CL] == artist:
-            artist_songs.append((row[TRACK_NAME_CL], row[TRACK_POPULARITY_CL]))
+            songs.append((row[TRACK_NAME_CL], row[TRACK_POP_CL]))
 
-    return sorted(artist_songs, key=lambda x: x[1], reverse=True)[:n]
-
-
-def get_top_songs_by_genre(table, genre, n=5):
-    songs_by_genres = []
-
-    for row in table:
-        genres = row[GENRES_CL][1:-1].replace("'", "").split(", ")
-        if genre in genres:
-            songs_by_genres.append({"artist_name": row[ARTIST_CL], "track_name": row[TRACK_NAME_CL],
-                                    "track_popularity": row[TRACK_POPULARITY_CL]})
-
-    return sorted(songs_by_genres, key=lambda x: x["track_popularity"], reverse=True)[:n]
+    print(artist)
+    for i, song in enumerate(sorted(songs, key=lambda x: x[1], reverse=True)[:n]):
+        print(f"{i+1}) {song[0]}: {song[1]}")
 
 
-def get_top_songs_by_period(table, period: Tuple[int, int], n=5):
-    songs_by_period = []
+def euclidean_distance(vector_1, vector_2):
+    result = 0
+    for i in range(len(vector_1)):
+        result += (vector_1[i] - vector_2[i]) ** 2
 
-    for row in table:
-        if period[0] <= row[YEAR_CL] <= period[1]:
-            songs_by_period.append({"artist_name": row[ARTIST_CL], "track_name": row[TRACK_NAME_CL],
-                                    "track_popularity": row[TRACK_POPULARITY_CL]})
-
-    return sorted(songs_by_period, key=lambda x: x["track_popularity"], reverse=True)[:n]
+    return result**0.5
 
 
-def l1_normalize(v):
-    norm = sum([i ** 2 for i in v]) ** .5
-    return [i / norm for i in v]
-
-
-def E_dist(v1, v2):
-    res = 0
-    for i in range(len(v1)):
-        res += (v1[i] - v2[i]) ** 2
-    return res ** .5
-
-
-def E_dist_w_L1(v1, v2):
-    res = 0
-    v1 = l1_normalize(v1)
-    v2 = l1_normalize(v2)
-    for i in range(len(v1)):
-        res += (v1[i] - v2[i]) ** 2
-    return res ** .5
-
-
-def cos_dist(v1, v2):
-    s1 = sum([v1[i] * v2[i] for i in range(len(v1))])
-    s2 = sum([v1[i] ** 2 for i in range(len(v1))])
-    s3 = sum([v2[i] ** 2 for i in range(len(v1))])
-    cos_similarity = s1 / (s2 * s3) * .5
-    cos_distance = 1 - cos_similarity
-    return cos_distance
-
-
-optional_functions = {"E_dist": E_dist, "cos_dist": cos_dist, "E_dist_w_L1": E_dist_w_L1}
-
-
-def get_top_similar_songs(table, url, func: _DISTS = "E_dist", n=5):
-    """
-    compare only E-dist
-    """
-    options = get_args(_DISTS)
-    assert func in options, f"'{func}' is not in {options}"
-
-    func = optional_functions[func]
-    base_song = []
-    base_song_idx = -1
-    similar_songs = []
-
-    for idx, row in enumerate(table):
-        if row[URL_CL] == url:
-            base_song = row
-            base_song_idx = idx
+def get_top_songs_by_sound(table, song_id, n=5):
+    base_song_idx = 0
+    for i, row in enumerate(table):
+        if song_id == row[TRACK_ID_CL]:
+            base_song = row[-13:]
+            base_song_idx = i
             break
 
-    for idx, row in enumerate(table):
-        if idx == base_song_idx:
+    distances = []
+    for i, row in enumerate(table):
+        if i == base_song_idx:
             continue
-        dist = func(base_song[TRACK_CHARACTERISTIC_CLS[0]:TRACK_CHARACTERISTIC_CLS[1]],
-                    row[TRACK_CHARACTERISTIC_CLS[0]:TRACK_CHARACTERISTIC_CLS[1]])
-        similar_songs.append({"artist_name": row[ARTIST_CL], "track_name": row[TRACK_NAME_CL], "dist": dist})
+        current = row[-13:]
+        distance = euclidean_distance(base_song, current)
+        distances.append((distance, i))
 
-    return sorted(similar_songs, key=lambda x: x["dist"])[:n]
+    distances.sort()
+
+    return [
+        (table[i[1]][TRACK_NAME_CL], table[i[1]][ARTIST_CL], i[0])
+        for i in distances[:n]
+    ]
+
+
+def hamming_distance(left_str, right_str):
+    dist = 0
+
+    if len(left_str) > len(right_str):
+        left_str, right_str = right_str, left_str
+
+    left_str += (len(right_str) - len(left_str)) * "й"
+
+    for i in range(len(right_str)):
+        if right_str[i] != left_str[i]:
+            dist += 1
+
+    return dist
+
+
+def jaccard_index(left_str, right_str):
+
+    sim = 0
+    lset, rset = set(left_str.split()), set(right_str.split())
+    print(lset, rset, lset & rset, lset | rset - lset & rset)
+
+    return len(lset & rset) / (len(lset) + len(rset) - len(lset & rset))
+
+
+def find_similar_song_name(table, query):
+    words = query.lower().split()
+    hd_list = list()
+    jc_list = list()
+    for i, row in enumerate(table):
+        hd = hamming_distance(query.lower(), row[TRACK_NAME_CL].lower())
+        hd_list.append((hd, i))
+        jc = jaccard_index(query.lower(), row[TRACK_NAME_CL].lower())
+        jc_list.append((jc, i))
+
+        row_split = row[TRACK_NAME_CL].lower().split()
+
+        if all(x in row_split for x in words):
+            print(row[TRACK_NAME_CL])
+
+    print("\n\n----HAMMMING----\n\n")
+    hd_list.sort()
+
+    for i, x in hd_list[:5]:
+        print(table[x][TRACK_NAME_CL])
+
+    print("\n\n----JACCARD----\n\n")
+    jc_list.sort(reverse=True)
+    for i, x in jc_list[:5]:
+        print(table[x][TRACK_NAME_CL])
+        # TODO: fix
 
 
 def test(table):
     # print(get_table_shape(table))
     # print(get_column_stat(table, 12, "max"))
     # print(get_top_artist_count(table))
-    print(get_top_similar_songs(table, "https://open.spotify.com/playlist/2fmTTbBkXi8pewbUvG3CeZ", func="E_dist", n=3))
-    print(
-        get_top_similar_songs(table, "https://open.spotify.com/playlist/2fmTTbBkXi8pewbUvG3CeZ", func="cos_dist", n=3))
-    print(get_top_similar_songs(table, "https://open.spotify.com/playlist/2fmTTbBkXi8pewbUvG3CeZ", func="aboba", n=3))
+    # print(get_artist_with_most_songs(table))
+    # get_top_artist_tracks(table, "Rihanna", 10)
+    # print(*get_top_songs_by_sound(table, "0wwPcA6wtMf6HUMpIRdeP7", 10), sep="\n")
+    (find_similar_song_name(table, "in me"))
 
 
 if __name__ == "__main__":
@@ -169,6 +196,7 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--column_index", type=int, help="Column index for stats")
     parser.add_argument("-a", "--stats", type=str, choices=["min", "max", "std"])
     parser.add_argument("-t", "--top_artists", type=int)
+
     # running not in console
     args = parser.parse_args(["./data/playlist_2010to2022.csv"])
 
@@ -185,14 +213,14 @@ if __name__ == "__main__":
         shape = get_table_shape(db)
         print(f"Database shape: {shape[0]} rows, {shape[1]} columns")
 
+    if args.top_artists:
+        n = get_top_artist_count(db, args.top_artists)
+        for i, p in enumerate(n):
+            print(f"{i+1}) {p[0]}: {p[1]}")
+
     if args.column_index:
         print(
             f"{args.stats} is {get_column_stat(db, args.column_index, args.stats)} for {args.column_index} column!"
         )
 
-    if args.top_artists:
-        res = get_top_artist_count(db, args.top_artists)
-        for idx, el in enumerate(res):
-            print(f"{idx + 1}) {el[0]}: {el[1]}")
-
-    test(db)
+test(db)
